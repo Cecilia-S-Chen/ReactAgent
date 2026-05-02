@@ -1,4 +1,5 @@
 import { initializeSystemPrompt } from "./prompt_template";
+import { logger } from "./logger";
 import OpenAI from 'openai'
 
 type ToolDefinition = {
@@ -16,7 +17,7 @@ export class ReactAgent {
         this._tool_handler_list = new Map()
         this._tool_definition_list = []
         this._model_client = new OpenAI({
-            baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            baseURL: "https://api.z.ai/api/paas/v4",
             apiKey: process.env.LLM_APIKEY,
         })
     }
@@ -32,6 +33,8 @@ export class ReactAgent {
     async run(user_input: string) {
         console.log(`🤔User input: ${user_input}`)
         const system_prompt = initializeSystemPrompt()
+        await logger.info(JSON.stringify({role: 'system', content: system_prompt}))
+        await logger.info(JSON.stringify({role: 'user', content: user_input}))
         const history_message: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
             {role: 'system', content: system_prompt},
             {role: 'user', content: user_input}
@@ -66,6 +69,7 @@ export class ReactAgent {
             tool_choice: 'auto',
         })
         const content = response.choices[0]?.message
+        await logger.info(JSON.stringify(response.choices[0]))
         history_message.push(content)
         return content
     }
@@ -81,7 +85,8 @@ export class ReactAgent {
 
             if (function_handler) {
                 try {
-                    const tool_result = await function_handler(...Object.values(function_args))
+                    const tool_result = await function_handler(function_args)
+                    await logger.info(`{role: 'tool', tool_call_id: ${tool_call.id}, content: ${typeof tool_result === 'string' ? tool_result : JSON.stringify(tool_result)}}`)
                     history_message.push({
                         role: 'tool',
                         tool_call_id: tool_call.id,
@@ -89,6 +94,7 @@ export class ReactAgent {
                     })
                 } catch (error) {
                     console.error(`❌Tool execution error: ${error}`)
+                    await logger.error(`{role: 'tool', tool_call_id: ${tool_call.id}, content: ${String(error)}}`)
                     history_message.push({
                         role: 'tool',
                         tool_call_id: tool_call.id,
