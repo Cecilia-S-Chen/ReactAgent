@@ -1,5 +1,6 @@
 import { initializeSystemPrompt } from "./prompt_template";
 import { logger } from "./logger";
+import { ConversationStore } from "./conversation_store";
 import OpenAI from 'openai'
 
 type ToolDefinition = {
@@ -12,14 +13,24 @@ export class ReactAgent {
     private _tool_handler_list: Map<string, any>
     private _tool_definition_list: OpenAI.Chat.Completions.ChatCompletionTool[]
     private _model_client: OpenAI
+    private _history_message: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
+    private _store: ConversationStore
+    private _sessionId: string
 
-    constructor() {
+    constructor(sessionId?: string) {
         this._tool_handler_list = new Map()
         this._tool_definition_list = []
         this._model_client = new OpenAI({
             baseURL: "https://api.z.ai/api/paas/v4",
             apiKey: process.env.LLM_APIKEY,
         })
+        this._store = new ConversationStore()
+        this._sessionId = sessionId || `session_${Date.now()}`
+
+        const saved = this._store.load(this._sessionId) as OpenAI.Chat.Completions.ChatCompletionMessageParam[]
+        this._history_message = saved.length > 0
+            ? saved
+            : [{ role: 'system', content: initializeSystemPrompt() }]
     }
 
     registerTool(toolName: string, tool_func: any, tool_definition: ToolDefinition) {
@@ -32,17 +43,13 @@ export class ReactAgent {
 
     async run(user_input: string) {
         console.log(`🤔User input: ${user_input}`)
-        const system_prompt = initializeSystemPrompt()
-        await logger.info(JSON.stringify({role: 'system', content: system_prompt}))
         await logger.info(JSON.stringify({role: 'user', content: user_input}))
-        const history_message: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-            {role: 'system', content: system_prompt},
-            {role: 'user', content: user_input}
-        ]
+        this._history_message.push({ role: 'user', content: user_input })
 
         while (true) {
             try {
-                const response = await this._call_model(history_message)
+                const response = await this._call_model(this._history_message)
+                this._persistHistory()
 
                 if (!response.tool_calls || !response.tool_calls.length) {
                     console.log(`✅ Final answer： ${response.content}`)
@@ -50,13 +57,26 @@ export class ReactAgent {
                 }
 
                 for (const tool_call of response.tool_calls) {
-                    await this._call_tool(tool_call, history_message)
+                    await this._call_tool(tool_call, this._history_message)
                 }
+                this._persistHistory()
             } catch (error) {
                 console.error(`❌Agent run error: ${error}`)
                 return
             }
         }
+    }
+
+    reset() {
+        this._history_message = [
+            { role: 'system', content: initializeSystemPrompt() }
+        ]
+        this._store.delete(this._sessionId)
+        this._sessionId = `session_${Date.now()}`
+    }
+
+    private _persistHistory() {
+        this._store.save(this._sessionId, this._history_message)
     }
 
     private async _call_model(
