@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 
-const DEFAULT_STORE_DIR = path.join(__dirname, 'workspace', 'sessions')
+const DEFAULT_STORE_DIR = path.join(process.cwd(), 'workspace', 'sessions')
 
 export class ConversationStore {
     private _dir: string
