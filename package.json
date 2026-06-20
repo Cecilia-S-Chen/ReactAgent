@@ -1,9 +1,15 @@
 {
   "type": "module",
+  "scripts": {
+    "start": "bun run run.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
   "devDependencies": {
     "@types/node": "^25.6.0",
     "ts-node": "^10.9.2",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.9"
   },
   "dependencies": {
     "openai": "^6.33.0",

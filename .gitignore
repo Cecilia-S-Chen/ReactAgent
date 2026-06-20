@@ -1,1 +1,4 @@
 node_modules/
+workspace/
+logs/
+__tests__
